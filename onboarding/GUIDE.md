@@ -215,6 +215,8 @@ Pure Pursuit picks a **lookahead** point on the path ahead of the car and steers
 
 ![Pure Pursuit geometry](figures/pure_pursuit_geometry.png)
 
+*Mario Theers and Mankaran Singh, [Algorithms for Automated Driving](https://thomasfermi.github.io/Algorithms-for-Automated-Driving/Control/PurePursuit.html), “The magenta triangle helps us to establish a formula for δ.” Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).*
+
 | Symbol | Meaning |
 |--------|---------|
 | **Ld** | Lookahead distance — how far ahead on the path we chase |
