@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fast DDS profile for the IFSSIM bridge container. Tuned for the
+  /lidar/Lidar1 firehose on macOS Docker Desktop.
+
+  PointCloud2 messages are ~1.4 MB at 1.74 M attempted pts/s. Bridge
+  publishes at ~10.7 Hz. With Fast DDS defaults the downstream
+  subscriber loses ~30 % (subscriber ~7-8 Hz vs publisher ~10.7 Hz)
+  because synchronous publish blocks the calling thread mid-fragment
+  + small SHM segment cycles repeatedly per send.
+
+  Knobs flipped here:
+
+    1. ASYNCHRONOUS publish mode on the default publisher profile —
+       fragments drained by Fast DDS' internal writer thread instead
+       of the publisher's calling thread. Standard recipe for large
+       BEST_EFFORT samples.
+    2. SHM transport with a 64 MB segment (default ~512 KB). At
+       1.4 MB per LiDAR sample the small default would cycle the
+       segment 3x per send under burst.
+    3. PREALLOCATED_WITH_REALLOC history memory policy on writer +
+       reader — avoids per-message heap allocation of the 1.4 MB
+       sample buffer.
+
+  Bind-mounted (not COPY'd) so iterating doesn't require an image
+  rebuild. Wired in via FASTRTPS_DEFAULT_PROFILES_FILE in
+  docker-compose.yml; both publishers and subscribers in this
+  container pick it up.
+-->
+<profiles xmlns="http://www.eprosima.com">
+
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>shm_transport</transport_id>
+      <type>SHM</type>
+      <segment_size>67108864</segment_size>
+      <port_queue_capacity>1024</port_queue_capacity>
+      <maxMessageSize>2097152</maxMessageSize>
+    </transport_descriptor>
+
+    <transport_descriptor>
+      <transport_id>udp_transport</transport_id>
+      <type>UDPv4</type>
+      <sendBufferSize>16777216</sendBufferSize>
+      <receiveBufferSize>16777216</receiveBufferSize>
+    </transport_descriptor>
+  </transport_descriptors>
+
+  <participant profile_name="participant_default" is_default_profile="true">
+    <rtps>
+      <!-- Layer the larger-buffer SHM + UDP descriptors on top of the
+           builtin defaults rather than replacing them. With
+           useBuiltinTransports=false discovery breaks (multicast
+           announces use a builtin descriptor that's not declared
+           here), so participants never see each other. Keeping the
+           builtins on means our descriptors take precedence for
+           data flow but the builtins still handle the housekeeping. -->
+      <userTransports>
+        <transport_id>shm_transport</transport_id>
+        <transport_id>udp_transport</transport_id>
+      </userTransports>
+      <useBuiltinTransports>true</useBuiltinTransports>
+    </rtps>
+  </participant>
+
+  <publisher profile_name="default_publisher" is_default_profile="true">
+    <qos>
+      <publishMode>
+        <kind>ASYNCHRONOUS</kind>
+      </publishMode>
+    </qos>
+    <historyMemoryPolicy>PREALLOCATED_WITH_REALLOC</historyMemoryPolicy>
+  </publisher>
+
+  <subscriber profile_name="default_subscriber" is_default_profile="true">
+    <historyMemoryPolicy>PREALLOCATED_WITH_REALLOC</historyMemoryPolicy>
+  </subscriber>
+
+</profiles>

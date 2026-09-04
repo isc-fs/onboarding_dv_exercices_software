@@ -1,0 +1,126 @@
+# Repo-wide .dockerignore.
+#
+# Pre-#490 the repo had no .dockerignore, so every `docker compose
+# build` shipped the full 33 GB working tree (24 GB of bags, 4.4 GB
+# of UE5 build artifacts, 1.4 GB of .git) through Docker Desktop's
+# 9p/virtiofs mount as build context — on Windows + WSL2 with the
+# repo on /mnt/c that was the dominant cost of an image build
+# (~minutes), even when the actual COPY in the Dockerfile only
+# needed ~50 MB of source.
+#
+# Allowlist would be cleaner but Docker BuildKit's exclusion semantics
+# don't compose well with multi-stage `COPY` from different paths,
+# and we'd risk silently dropping a path some Dockerfile depends on.
+# So this is a denylist: exclude the obvious heavyweight stuff that
+# no Dockerfile in this repo COPYs from. Audit point: when adding a
+# new Dockerfile, check what it COPYs and verify nothing here would
+# hide it.
+#
+# Cost dropped from ~33 GB → ~200 MB after this file. On Windows
+# /mnt/c that takes the build-context transfer from minutes to seconds.
+
+# ---- VCS ----
+.git
+.gitattributes
+.gitmodules
+# Nested .git — the pipeline/ submodule has a .git gitlink file that
+# `COPY pipeline/ src/` would otherwise drop into the colcon workspace.
+**/.git
+# The pipeline submodule ships its own README at its root; it's not a
+# ROS package so colcon ignores it, but keep it out of the image src/.
+pipeline/README.md
+
+# ---- UE5 build/cooked output (5+ GB combined) ----
+# Saved/ holds StagedBuilds (the packaged .app), logs, AutoSaves,
+# editor crashdumps. Intermediate/ is UE5's transient build dir.
+# DerivedDataCache/ is GiB-scale; cooked Saved/Cooked/ likewise.
+# None of this is consumed by any Dockerfile.
+Saved
+Intermediate
+DerivedDataCache
+Binaries
+Build
+
+# ---- UE5 content (binary .uasset / .umap; multi-GB) ----
+# Tracks ARE bind-mounted into mc_backend at runtime (UE5 host
+# process needs the same dir for loadTrack) — but we never COPY
+# them into an image, so they're safe to exclude from build context.
+Content
+
+# ---- Bag recordings (#465; 24 GB on a busy dev box) ----
+# Bags land in the `ifssim_bags` named volume per #490, but the
+# host-side `bags/` directory still holds historical recordings
+# pulled via tools/pull-bag.sh. Image builds never need any of it.
+bags
+
+# ---- Plugin build artifacts ----
+Plugins/*/Binaries
+Plugins/*/Intermediate
+Plugins/*/Saved
+# Plugin source ITSELF (Plugins/*/Source) IS sometimes COPY'd into
+# images that build the C++ bridge against it — don't exclude that.
+
+# ---- Editor / IDE / OS junk ----
+.vscode
+.idea
+*.user
+*.suo
+*.opensdf
+*.sdf
+.vs
+.DS_Store
+*.swp
+*~
+
+# ---- Node / frontend ----
+# mc_frontend's Dockerfile installs node_modules INSIDE the image
+# from package.json — host node_modules is wasted context. Same for
+# any random-track-generator dev installs.
+node_modules
+npm-debug.log
+.next
+.turbo
+.parcel-cache
+
+# ---- Python ----
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+.tox
+.venv
+venv
+*.egg-info
+
+# ---- ROS / colcon ----
+# Local colcon trees from running tests on the host; in-container
+# builds happen fresh inside the Dockerfile.
+build
+install
+log
+
+# ---- Docker / compose artifacts ----
+# Anything we'd want to keep is committed under docker/.
+docker-compose.override.yml
+.env
+
+# ---- Misc large binary outputs ----
+dist
+*.zip
+*.tar.gz
+*.tar.bz2
+*.7z
+*.mcap
+*.bag
+*.db3
+
+# ---- Documentation builds ----
+docs/_build
+docs/_site
+site
+
+ifs-onboarding

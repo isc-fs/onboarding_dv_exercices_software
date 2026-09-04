@@ -1,0 +1,12 @@
+# Isolated onboarding repo — ignore build / runtime junk
+.git
+**/.git
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+bags/**
+!bags/.gitkeep
+tools/mission_control/frontend/node_modules/
+tools/mission_control/frontend/dist/
+*.egg-info/
+.venv/

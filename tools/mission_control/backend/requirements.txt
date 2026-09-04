@@ -1,0 +1,9 @@
+fastapi>=0.104.0
+uvicorn[standard]>=0.46.0
+websockets>=16.0
+matplotlib>=3.10.9
+scipy>=1.8.0
+shapely>=2.1.2
+gpxpy>=1.6.2
+# --- Dev / CI ---
+pytest>=8.0

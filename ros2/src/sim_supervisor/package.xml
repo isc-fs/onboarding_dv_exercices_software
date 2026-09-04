@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>sim_supervisor</name>
+  <version>0.0.1</version>
+  <description>
+    sim_supervisor_node — simulates the role the IFS-08 uDV
+    (microcontroller, microROS endpoint) plays on the real car. In sim
+    it sources the GO signal, sinks the FINISHED signal, and is the
+    DVPC-side action endpoint that mission_control_backend (web)
+    targets through StartMission. On the real car this node does not
+    run; the physical uDV plays that role instead.
+
+    See docs/autonomy_pipeline.md §"End-to-end graph" and §"Runtime
+    action protocol" for the full diagram and the two-phase action
+    contract this node implements.
+  </description>
+  <maintainer email="raul@isc-fs.com">Raul Moran</maintainer>
+  <license>GPL-3.0-or-later</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>lifecycle_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>fs_msgs</depend>
+  <depend>dv_msgs</depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

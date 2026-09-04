@@ -1,0 +1,594 @@
+{
+  "configById": {
+
+    "Tab!main": {
+      "activeTabIdx": 0,
+      "tabs": [
+        {
+          "title": "Control",
+          "layout": {
+            "direction": "row",
+            "first": "3D!control_map",
+            "second": {
+              "direction": "row",
+              "first": {
+                "direction": "column",
+                "first": {
+                  "direction": "row",
+                  "first": "Plot!steering",
+                  "second": "Plot!speed",
+                  "splitPercentage": 50
+                },
+                "second": {
+                  "direction": "column",
+                  "first": {
+                    "direction": "row",
+                    "first": "Plot!throttle_brake",
+                    "second": "Plot!imu_accel",
+                    "splitPercentage": 50
+                  },
+                  "second": {
+                    "direction": "column",
+                    "first": "Plot!yaw_rate",
+                    "second": "Plot!cone_count",
+                    "splitPercentage": 50
+                  },
+                  "splitPercentage": 50
+                },
+                "splitPercentage": 25
+              },
+              "second": "RawMessages!cmd",
+              "splitPercentage": 75
+            },
+            "splitPercentage": 35
+          }
+        },
+        {
+          "title": "SLAM",
+          "layout": {
+            "direction": "row",
+            "first": "3D!slam_map",
+            "second": {
+              "direction": "column",
+              "first": "Plot!cone_count_slam",
+              "second": {
+                "direction": "column",
+                "first": "Plot!pose_drift",
+                "second": "RawMessages!conos",
+                "splitPercentage": 50
+              },
+              "splitPercentage": 33
+            },
+            "splitPercentage": 70
+          }
+        },
+        {
+          "title": "IMU",
+          "layout": {
+            "direction": "row",
+            "first": "3D!imu_view",
+            "second": {
+              "direction": "column",
+              "first": "Plot!imu_accel_xyz",
+              "second": {
+                "direction": "column",
+                "first": "Plot!angular_vel",
+                "second": "Plot!speed_imu",
+                "splitPercentage": 50
+              },
+              "splitPercentage": 33
+            },
+            "splitPercentage": 25
+          }
+        }
+      ]
+    },
+
+    "3D!control_map": {
+      "cameraState": {
+        "distance": 50,
+        "perspective": false,
+        "phi": 0,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "thetaOffset": 0,
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "followTf": "base_link",
+      "followMode": "follow-position",
+      "scene": {
+        "syncCamera": false,
+        "transforms": { "showAxes": false, "showLabels": false, "axisScale": 1 },
+        "background": { "color": "#0a0a0a" }
+      },
+      "transforms": {},
+      "topics": {
+        "/lidar/Lidar1/viz": {
+          "visible": true,
+          "colorField": "z",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "minValue": -0.5,
+          "maxValue": 1.5,
+          "pointSize": 2,
+          "pointShape": "circle",
+          "decayTime": 0
+        },
+        "/Conos_raw": { "visible": false },
+        "/Conos": { "visible": true },
+        "/Conos_Orange": { "visible": true },
+        "/Path": { "visible": true },
+        "/path_planning/debug": { "visible": true },
+        "/testing_only/track": { "visible": false }
+      },
+      "layers": []
+    },
+
+    "3D!slam_map": {
+      "cameraState": {
+        "distance": 60,
+        "perspective": false,
+        "phi": 0,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "thetaOffset": 0,
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "followTf": "odom",
+      "followMode": "follow-none",
+      "scene": {
+        "syncCamera": false,
+        "transforms": { "showAxes": true, "showLabels": true, "axisScale": 1 },
+        "background": { "color": "#111111" }
+      },
+      "transforms": {},
+      "topics": {
+        "/lidar/Lidar1/viz": {
+          "visible": true,
+          "colorField": "z",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "minValue": -0.5,
+          "maxValue": 1.5,
+          "pointSize": 2,
+          "pointShape": "circle",
+          "decayTime": 0
+        },
+        "/Conos_raw": { "visible": true },
+        "/Conos": { "visible": true },
+        "/Conos_Orange": { "visible": true },
+        "/Path": { "visible": true },
+        "/path_planning/debug": { "visible": true },
+        "/testing_only/track": { "visible": false },
+        "/testing_only/odom": { "visible": true },
+        "/slam/pose": { "visible": true }
+      },
+      "layers": []
+    },
+
+    "3D!imu_view": {
+      "cameraState": {
+        "distance": 15,
+        "perspective": true,
+        "phi": 60,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "thetaOffset": 45,
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "followTf": "base_link",
+      "followMode": "follow-pose",
+      "scene": {
+        "syncCamera": false,
+        "transforms": { "showAxes": true, "showLabels": true, "axisScale": 1 },
+        "background": { "color": "#0a0a0a" }
+      },
+      "transforms": {},
+      "topics": {
+        "/lidar/Lidar1/viz": {
+          "visible": true,
+          "colorField": "z",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "minValue": -0.5,
+          "maxValue": 1.5,
+          "pointSize": 2,
+          "pointShape": "circle",
+          "decayTime": 0.5
+        },
+        "/Path": { "visible": true }
+      },
+      "layers": []
+    },
+
+    "Plot!steering": {
+      "title": "Steering [-1…1]",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "paths": [
+        {
+          "value": "/ctrl/cmd_internal.steering",
+          "enabled": true,
+          "label": "Steering",
+          "color": "#4488ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!speed": {
+      "title": "Speed [m/s]",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "paths": [
+        {
+          "value": "/slam/pose.twist.twist.linear.x",
+          "enabled": true,
+          "label": "vx (SLAM)",
+          "color": "#ff8800",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/slam/pose.twist.twist.linear.y",
+          "enabled": true,
+          "label": "vy (SLAM)",
+          "color": "#ff4444",
+          "lineSize": 1.0,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!throttle_brake": {
+      "title": "Throttle / brake",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "maxYValue": 1,
+      "paths": [
+        {
+          "value": "/ctrl/cmd_internal.throttle",
+          "enabled": true,
+          "label": "Throttle",
+          "color": "#00cc44",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/ctrl/cmd_internal.brake",
+          "enabled": true,
+          "label": "Brake",
+          "color": "#ff3333",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!imu_accel": {
+      "title": "Acceleration [m/s²]",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "paths": [
+        {
+          "value": "/imu.linear_acceleration.x",
+          "enabled": true,
+          "label": "ax (lon)",
+          "color": "#4488ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/imu.linear_acceleration.y",
+          "enabled": true,
+          "label": "ay (lat)",
+          "color": "#ff8800",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!yaw_rate": {
+      "title": "Yaw rate [rad/s]",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "paths": [
+        {
+          "value": "/imu.angular_velocity.z",
+          "enabled": true,
+          "label": "Yaw rate (IMU)",
+          "color": "#aa44ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/testing_only/odom.twist.twist.angular.z",
+          "enabled": true,
+          "label": "Yaw rate (GT odom)",
+          "color": "#44ffaa",
+          "lineSize": 1.0,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!cone_count": {
+      "title": "Mapped cones",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "paths": [
+        {
+          "value": "/Conos.markers[:]{id}.id",
+          "enabled": true,
+          "label": "Mapped cones",
+          "color": "#00cc88",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!cone_count_slam": {
+      "title": "Mapped cones",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "paths": [
+        {
+          "value": "/Conos.markers[:]{id}.id",
+          "enabled": true,
+          "label": "Mapped cones",
+          "color": "#00cc88",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!pose_drift": {
+      "title": "Position (SLAM vs GT)",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "paths": [
+        {
+          "value": "/slam/pose.pose.pose.position.x",
+          "enabled": true,
+          "label": "SLAM x",
+          "color": "#4488ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/slam/pose.pose.pose.position.y",
+          "enabled": true,
+          "label": "SLAM y",
+          "color": "#88ff44",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/testing_only/odom.pose.pose.position.x",
+          "enabled": true,
+          "label": "GT x",
+          "color": "#ff4488",
+          "lineSize": 1.0,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/testing_only/odom.pose.pose.position.y",
+          "enabled": true,
+          "label": "GT y",
+          "color": "#ffaa44",
+          "lineSize": 1.0,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!imu_accel_xyz": {
+      "title": "IMU linear acceleration [m/s²]",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "paths": [
+        {
+          "value": "/imu.linear_acceleration.x",
+          "enabled": true,
+          "label": "ax",
+          "color": "#4488ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/imu.linear_acceleration.y",
+          "enabled": true,
+          "label": "ay",
+          "color": "#ff8800",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/imu.linear_acceleration.z",
+          "enabled": true,
+          "label": "az",
+          "color": "#ff4444",
+          "lineSize": 1.0,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!angular_vel": {
+      "title": "IMU angular velocity [rad/s]",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "paths": [
+        {
+          "value": "/imu.angular_velocity.x",
+          "enabled": true,
+          "label": "roll rate",
+          "color": "#4488ff",
+          "lineSize": 1.0,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/imu.angular_velocity.y",
+          "enabled": true,
+          "label": "pitch rate",
+          "color": "#ff8800",
+          "lineSize": 1.0,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/imu.angular_velocity.z",
+          "enabled": true,
+          "label": "yaw rate",
+          "color": "#aa44ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "Plot!speed_imu": {
+      "title": "Speed (SLAM state) [m/s]",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "paths": [
+        {
+          "value": "/slam/pose.twist.twist.linear.x",
+          "enabled": true,
+          "label": "vx",
+          "color": "#ff8800",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/slam/pose.twist.twist.linear.y",
+          "enabled": true,
+          "label": "vy",
+          "color": "#ff4444",
+          "lineSize": 1.0,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+
+    "RawMessages!cmd": {
+      "topicPath": "/ctrl/cmd_internal"
+    },
+
+    "RawMessages!conos": {
+      "topicPath": "/Conos"
+    }
+  },
+
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": { "speed": 1 },
+
+  "layout": "Tab!main"
+}

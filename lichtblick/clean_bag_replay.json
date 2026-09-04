@@ -1,0 +1,411 @@
+{
+  "configById": {
+    "3D!main": {
+      "cameraState": {
+        "distance": 35,
+        "perspective": true,
+        "phi": 60,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "thetaOffset": 0,
+        "fovy": 0.7,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followTf": "base_link",
+      "followMode": "follow-position",
+      "scene": {
+        "syncCamera": false,
+        "transforms": {
+          "showAxes": true,
+          "showLabels": false,
+          "axisScale": 1.5
+        },
+        "background": {
+          "color": "#0a0a14"
+        }
+      },
+      "transforms": {
+        "frame:map": {
+          "visible": true
+        },
+        "frame:odom": {
+          "visible": true
+        },
+        "frame:base_link": {
+          "visible": true
+        },
+        "frame:fsds/GPS": {
+          "visible": false
+        },
+        "frame:fsds/IMU": {
+          "visible": false
+        },
+        "frame:fsds/Lidar": {
+          "visible": false
+        }
+      },
+      "topics": {
+        "/lidar/Lidar1/viz": {
+          "visible": true,
+          "colorField": "z",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "minValue": -1.0,
+          "maxValue": 2.0,
+          "pointSize": 4,
+          "pointShape": "circle",
+          "decayTime": 0
+        },
+        "/testing_only/odom": {
+          "visible": true,
+          "type": "nav_msgs/msg/Odometry",
+          "covariance": false,
+          "axisScale": 0.8
+        },
+        "/Conos_raw": {
+          "visible": false,
+          "type": "visualization_msgs/msg/MarkerArray"
+        },
+        "/track_overlay": {
+          "visible": true,
+          "type": "visualization_msgs/msg/MarkerArray"
+        },
+        "/Conos": {
+          "visible": true
+        },
+        "/Conos_Orange": {
+          "visible": true
+        },
+        "/Path": {
+          "visible": true
+        },
+        "/path_planning/debug": {
+          "visible": true
+        },
+        "/slam/pose": {
+          "visible": true
+        }
+      },
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26
+      }
+    },
+    "3D!world": {
+      "cameraState": {
+        "distance": 120,
+        "perspective": false,
+        "phi": 0,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "thetaOffset": 0,
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followTf": "odom",
+      "followMode": "follow-none",
+      "scene": {
+        "syncCamera": false,
+        "transforms": {
+          "showAxes": true,
+          "showLabels": false,
+          "axisScale": 2.0
+        },
+        "background": {
+          "color": "#0a0a14"
+        }
+      },
+      "transforms": {
+        "frame:map": {
+          "visible": true
+        },
+        "frame:odom": {
+          "visible": true
+        },
+        "frame:base_link": {
+          "visible": true
+        },
+        "frame:fsds/GPS": {
+          "visible": false
+        },
+        "frame:fsds/IMU": {
+          "visible": false
+        },
+        "frame:fsds/Lidar": {
+          "visible": false
+        }
+      },
+      "topics": {
+        "/lidar/Lidar1/viz": {
+          "visible": true,
+          "colorField": "z",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "minValue": -1.0,
+          "maxValue": 2.0,
+          "pointSize": 3,
+          "pointShape": "circle",
+          "decayTime": 0
+        },
+        "/testing_only/odom": {
+          "visible": true,
+          "type": "nav_msgs/msg/Odometry",
+          "covariance": false,
+          "axisScale": 0.5
+        },
+        "/Conos_raw": {
+          "visible": false,
+          "type": "visualization_msgs/msg/MarkerArray"
+        },
+        "/track_overlay": {
+          "visible": true,
+          "type": "visualization_msgs/msg/MarkerArray"
+        },
+        "/Conos": {
+          "visible": true
+        },
+        "/Conos_Orange": {
+          "visible": true
+        },
+        "/Path": {
+          "visible": true
+        },
+        "/path_planning/debug": {
+          "visible": true
+        },
+        "/slam/pose": {
+          "visible": true
+        }
+      }
+    },
+    "Plot!speed_rpm": {
+      "title": "Speed: GT body-frame v_x vs RPM-derived",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": -0.5,
+      "paths": [
+        {
+          "value": "/testing_only/odom.twist.twist.linear.x",
+          "enabled": true,
+          "label": "GT v_body_x (m/s)",
+          "color": "#44ffaa",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/motor_rpm.data * 0.00821",
+          "enabled": true,
+          "label": "RPM \u00d7 0.00821 (m/s)",
+          "color": "#aa44ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/odom.twist.twist.linear.x",
+          "enabled": true,
+          "label": "Filter v_body_x (m/s)",
+          "color": "#4488ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 200
+    },
+    "Plot!yaw_rate": {
+      "title": "Yaw rate (IMU vs filter vs GT)",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "paths": [
+        {
+          "value": "/imu.angular_velocity.z",
+          "enabled": true,
+          "label": "IMU yaw rate (rad/s)",
+          "color": "#aaff44",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/odom.twist.twist.angular.z",
+          "enabled": true,
+          "label": "Filter yaw rate (rad/s)",
+          "color": "#4488ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/testing_only/odom.twist.twist.angular.z",
+          "enabled": true,
+          "label": "GT yaw rate (rad/s)",
+          "color": "#44ffaa",
+          "lineSize": 1.0,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 200
+    },
+    "Plot!slam_gt_error": {
+      "title": "SLAM-vs-GT position error [m]",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "paths": [
+        {
+          "value": "/cone_slam/gt_error_m.data",
+          "enabled": true,
+          "label": "||SLAM - GT|| (m)",
+          "color": "#ff8844",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+    "Plot!map_to_odom_drift": {
+      "title": "||map \u2192 odom|| [m] \u2014 cumulative SLAM drift correction (low = healthy)",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "paths": [
+        {
+          "value": "/studio_script/map_to_odom_norm.data",
+          "enabled": true,
+          "label": "||map \u2192 odom|| (m)",
+          "color": "#ff44ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+    "Plot!yaw_drift_integrated": {
+      "title": "Yaw drift integrated [deg] \u2014 Filter \u2212 GT (anchor-aligned)",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "paths": [
+        {
+          "value": "/studio_script/yaw_drift_deg.data",
+          "enabled": true,
+          "label": "yaw error [deg]",
+          "color": "#ff5566",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {
+    "map_to_odom_norm": {
+      "name": "map_to_odom_norm",
+      "sourceCode": "// Compute ||map \u2192 odom|| translation magnitude from /tf.\n//\n// `map \u2192 odom` is SLAM's drift-correction transform: how far it has had\n// to drag the odom frame to keep dead-reckoning agreeing with the cone\n// map. Magnitude grows whenever OdometryFilter accumulates error\n// faster than per-scan SLAM corrections can absorb. A healthy lap\n// stays sub-metre; tens of metres means dead-reckoning is the\n// upstream problem (#391 \u2014 vy contamination, gyro bias).\n//\n// Output: /studio_script/map_to_odom_norm (m, Float32-shaped).\n\nimport { Input } from \"./types\";\n\ntype Output = { data: number };\n\nexport const inputs = [\"/tf\"];\nexport const output = \"/studio_script/map_to_odom_norm\";\n\nexport default function node(\n  event: Input<\"/tf\">,\n): Output | undefined {\n  for (const t of event.message.transforms) {\n    if (t.header.frame_id === \"map\" && t.child_frame_id === \"odom\") {\n      const tx = t.transform.translation.x;\n      const ty = t.transform.translation.y;\n      // 2D vehicle \u2014 z translation is essentially zero, omit it from\n      // the norm so the plot reads as planar drift.\n      return { data: Math.hypot(tx, ty) };\n    }\n  }\n  return undefined;\n}\n"
+    },
+    "yaw_drift_deg": {
+      "name": "yaw_drift_deg",
+      "sourceCode": "// Compute integrated yaw drift (Filter \u2212 GT) in degrees.\n//\n// Both /odom and /testing_only/odom publish a 3D pose; we extract yaw from\n// the quaternion, anchor each stream at its first sample (so any constant\n// world-frame offset between /odom's local frame and GT's world frame is\n// taken out), and emit the wrapped difference in degrees.\n//\n// This is the metric that compounds into bad path planning and bad\n// control \u2014 yaw RATE can look identical at every instant while integrated\n// yaw is dozens of degrees off.\n//\n// Output: /studio_script/yaw_drift_deg (deg, Float32-shaped).\n\nimport { Input } from \"./types\";\n\ntype Output = { data: number };\n\nexport const inputs = [\"/odom\", \"/testing_only/odom\"];\nexport const output = \"/studio_script/yaw_drift_deg\";\n\nlet odomAnchor: number | undefined = undefined;\nlet gtAnchor: number | undefined = undefined;\nlet latestOdom: number | undefined = undefined;\nlet latestGt: number | undefined = undefined;\n\nfunction quatYaw(q: { w: number; x: number; y: number; z: number }): number {\n  return Math.atan2(\n    2 * (q.w * q.z + q.x * q.y),\n    1 - 2 * (q.y * q.y + q.z * q.z),\n  );\n}\n\nfunction wrapPi(a: number): number {\n  return ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;\n}\n\nexport default function node(\n  event: Input<\"/odom\"> | Input<\"/testing_only/odom\">,\n): Output | undefined {\n  const yaw = quatYaw(event.message.pose.pose.orientation);\n  if (event.topic === \"/odom\") {\n    if (odomAnchor === undefined) odomAnchor = yaw;\n    latestOdom = wrapPi(yaw - odomAnchor);\n  } else {\n    if (gtAnchor === undefined) gtAnchor = yaw;\n    latestGt = wrapPi(yaw - gtAnchor);\n  }\n  if (latestOdom === undefined || latestGt === undefined) return undefined;\n  const err = wrapPi(latestOdom - latestGt);\n  return { data: (err * 180) / Math.PI };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "3D!main",
+      "second": "3D!world",
+      "splitPercentage": 60
+    },
+    "second": {
+      "direction": "column",
+      "first": "Plot!speed_rpm",
+      "second": {
+        "direction": "column",
+        "first": {
+          "direction": "column",
+          "first": "Plot!yaw_rate",
+          "second": "Plot!yaw_drift_integrated",
+          "splitPercentage": 50
+        },
+        "second": {
+          "direction": "column",
+          "first": "Plot!slam_gt_error",
+          "second": "Plot!map_to_odom_drift",
+          "splitPercentage": 50
+        },
+        "splitPercentage": 50
+      },
+      "splitPercentage": 33
+    },
+    "splitPercentage": 70
+  }
+}

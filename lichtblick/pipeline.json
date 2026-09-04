@@ -1,0 +1,181 @@
+{
+  "configById": {
+    "3D!main": {
+      "cameraState": {
+        "distance": 30,
+        "perspective": true,
+        "phi": 50,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          5,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "thetaOffset": 0,
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "followTf": "base_link",
+      "followMode": "follow-position",
+      "scene": {
+        "syncCamera": false,
+        "transforms": {
+          "showAxes": false,
+          "showLabels": false,
+          "axisScale": 0
+        },
+        "background": {
+          "color": "#111111"
+        }
+      },
+      "transforms": {
+        "frame:map": {
+          "visible": true
+        },
+        "frame:odom": {
+          "visible": true
+        },
+        "frame:base_link": {
+          "visible": true
+        },
+        "frame:fsds/GPS": {
+          "visible": false
+        },
+        "frame:fsds/IMU": {
+          "visible": false
+        },
+        "frame:fsds/Lidar": {
+          "visible": false
+        }
+      },
+      "topics": {
+        "/lidar/Lidar1/viz": {
+          "visible": true,
+          "colorField": "z",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "minValue": -0.5,
+          "maxValue": 1.5,
+          "pointSize": 2,
+          "pointShape": "circle",
+          "decayTime": 0
+        },
+        "/Conos": {
+          "visible": true
+        },
+        "/Conos_raw": {
+          "visible": false
+        },
+        "/Conos_Orange": {
+          "visible": true
+        },
+        "/Path": {
+          "visible": true
+        },
+        "/path_planning/debug": {
+          "visible": true
+        },
+        "/slam/pose": {
+          "visible": true
+        },
+        "/testing_only/track": {
+          "visible": false
+        }
+      },
+      "layers": []
+    },
+    "Plot!speed_control": {
+      "title": "Speed & control",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "maxYValue": 12,
+      "paths": [
+        {
+          "value": "/slam/pose.twist.twist.linear.x",
+          "enabled": true,
+          "label": "vx (SLAM, m/s)",
+          "color": "#00cc88",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/ctrl/cmd_internal.throttle",
+          "enabled": true,
+          "label": "Throttle",
+          "color": "#ffaa00",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        },
+        {
+          "value": "/ctrl/cmd_internal.brake",
+          "enabled": true,
+          "label": "Brake",
+          "color": "#ff4444",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    },
+    "Plot!steering": {
+      "title": "Steering",
+      "isSynced": true,
+      "legendDisplay": "floating",
+      "showLegend": true,
+      "showPlotValuesInLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "xAxisVal": "timestamp",
+      "minYValue": -1,
+      "maxYValue": 1,
+      "paths": [
+        {
+          "value": "/ctrl/cmd_internal.steering",
+          "enabled": true,
+          "label": "Steering [-1\u20261]",
+          "color": "#4488ff",
+          "lineSize": 1.5,
+          "timestampMethod": "receiveTime",
+          "showLine": true
+        }
+      ],
+      "sidebarDimension": 240
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "3D!main",
+    "second": {
+      "direction": "column",
+      "first": "Plot!speed_control",
+      "second": "Plot!steering",
+      "splitPercentage": 60
+    },
+    "splitPercentage": 65
+  }
+}

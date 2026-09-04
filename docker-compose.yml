@@ -1,0 +1,532 @@
+services:
+
+  # ROS2 bridge + full driverless pipeline in one container
+  # Connects to UE5/IFSSIM running natively on the host
+  dv_pipeline_stack:
+    build:
+      context: .
+      dockerfile: docker/dv_pipeline_stack/Dockerfile
+    # Pin image name so it stays `ifssim-dv_pipeline_stack` regardless
+    # of which directory `docker compose` runs from. Without this,
+    # compose auto-prefixes the image with the project name (the
+    # directory it was invoked from), so the same image was getting
+    # tagged `silly-black-47c6f4-dv_pipeline_stack` when built inside a
+    # worktree and `ifssim-dv_pipeline_stack` only from the main
+    # checkout. Tools (tools/replay.sh, tools/diagnostics/*) and the
+    # cone_graph_slam progress doc all assume the `ifssim-` prefix, so
+    # canonicalize on that.
+    image: ifssim-dv_pipeline_stack:latest
+    environment:
+      - IFSSIM_HOST=${IFSSIM_HOST:-host.docker.internal}
+      - IFSSIM_PORT=${IFSSIM_PORT:-41451}
+      - MISSION_NAME=${MISSION_NAME:-trackdrive}
+      - TRACK_NAME=${TRACK_NAME:-A}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - PIPELINE_ENABLED=${PIPELINE_ENABLED:-false}
+      # Skip the autonomous control node — useful for SLAM-only validation
+      # or when keyboard-driving for motion sanity checks.
+      - DV_DISABLE_CONTROL=${DV_DISABLE_CONTROL:-false}
+      # LiDAR transport is UDP-only as of #322. The plugin pushes
+      # via FSDSUdpBroadcaster on port 51453; the bridge listens
+      # there. The TCP and UDS LiDAR senders existed pre-#322 to
+      # work around macOS Docker Desktop's ~7 MB/s TCP loopback cap,
+      # but UDP turned out to be reliable enough on every supported
+      # host that maintaining three transports was no longer worth
+      # the wire-format cost. The `LIDAR_TRANSPORT` env var is gone.
+      #
+      # Opt-in subsampled LiDAR cloud for browser-based visualisers
+      # (Foxglove web, Lichtblick web). 0 (default) disables the
+      # /lidar/Lidar1/viz topic entirely — production runs unaffected.
+      # Set to >=2 to publish every Nth point on /viz alongside the
+      # full /lidar/Lidar1 cloud. Foxglove tab CPU on a 1.5 MB/scan
+      # stream sits around 35 %; LIDAR_VIZ_DECIMATION=4 drops it to
+      # ~10 % at 1/4 spatial density, plenty for "is the autonomy
+      # seeing what I think it's seeing" debugging.
+      - LIDAR_VIZ_DECIMATION=${LIDAR_VIZ_DECIMATION:-4}
+      # Cap BLAS / OpenMP thread pools per process (#247). Cone_Detection's
+      # RANSAC2 calls `np.dot()` 200× per scan; under default settings each
+      # call spawned 8-10 BLAS threads, sustaining ~800% CPU on a single
+      # node. At our matrix sizes thread spin-up cost dominates real work,
+      # so 2 threads is empirically faster end-to-end *and* leaves cores
+      # free for the rest of the pipeline. Applied container-wide because
+      # docker-compose's `environment:` block lacks per-process scoping;
+      # the other Python nodes (cone_graph_slam, control, Plan_Path) do
+      # very little BLAS-heavy work and aren't measurably slower under
+      # the cap. Override via env var if a regression appears.
+      - OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-2}
+      - MKL_NUM_THREADS=${MKL_NUM_THREADS:-2}
+      - OMP_NUM_THREADS=${OMP_NUM_THREADS:-2}
+      # DV_REBUILD_ON_STARTUP removed in #490. The flag used to re-run
+      # `colcon build` against the bind-mounted source on every
+      # container start; now the source is COPY'd into the image and
+      # built at image-build time. To pick up an edit, run
+      # `tools/refresh-bridge.sh` (or `docker compose build
+      # dv_pipeline_stack && docker compose up -d --force-recreate
+      # dv_pipeline_stack`). entrypoint.sh still consults the env var
+      # for legacy local overrides but its default codepath is now a
+      # no-op.
+      # When set to a writable file path, the path_planning node dumps
+      # one JSON line per planner callback (cones, pose, n_path,
+      # rejections). Used for offline replay against real failing
+      # scenes; default empty disables capture.
+      - DV_PLANNER_CAPTURE=${DV_PLANNER_CAPTURE:-}
+      # Same idea for cone_graph_slam: dumps one JSON line per new
+      # landmark creation (id, body_x/y, range, bearing, classified
+      # colour, current pose yaw). Used to verify whether colour lock-
+      # on-first-observation is triggering wrong-side classifications
+      # in tight corners (#188).
+      - DV_SLAM_LANDMARK_CAPTURE=${DV_SLAM_LANDMARK_CAPTURE:-}
+      # Unified numba JIT cache dir — ensures all pipeline nodes (slam, control,
+      # path_planning) share one persisted location regardless of where their
+      # source happens to live. Previous per-module __pycache__ volumes missed
+      # fsd_path_planning's deeply-nested caches, which left Plan_Path to
+      # re-JIT on every container boot and get SIGKILL'd mid-compile when the
+      # pipeline was restarted.
+      - NUMBA_CACHE_DIR=/numba_cache
+      # Fast DDS transport: SHM-preferred + UDP fallback. SHM is
+      # ~order-of-magnitude cheaper than UDP for same-container pub/sub
+      # and is the dominant cost on the bridge's 400 Hz sensor publish
+      # thread under pipeline load (sensor topics dropped from ~95 % of
+      # nominal idle → ~55 % of nominal with the full pipeline running,
+      # not because of subscriber backpressure but because per-publish
+      # DDS UDP serialisation + send was wall-clock-bound).
+      #
+      # The XML profile below pins ASYNCHRONOUS publish mode + a 64 MB
+      # SHM segment + preallocated reader/writer histories — the
+      # standard recipe for the 1.4 MB BEST_EFFORT /lidar/Lidar1
+      # samples. Default Fast DDS settings caused ~30 % loss between
+      # publish() and subscriber receive() at 1.74 M pts/s, even with
+      # the publisher comfortably hitting 10.7 Hz internally (synch
+      # publish blocks the calling thread mid-fragment + small SHM
+      # segment cycles 3x per send).
+      #
+      # XML is bind-mounted (not COPY'd into the image) so iterating
+      # doesn't require an image rebuild — restart the container after
+      # an edit.
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/dv_pipeline_stack_ws/fastdds_profile.xml
+    # Host networking: bypasses Docker Desktop's userspace UDP proxy
+    # (com.docker.backend) entirely. The proxy was unreliable for the
+    # high-rate / large-fragmented LiDAR datagrams — under sustained load
+    # the proxy would silently lose its socket binding for the LiDAR
+    # port (`lsof -nP -iUDP | grep 51453` empty), while the smaller-
+    # datagram sensor port stayed bound. Two attempts to fix at the port
+    # level (port-isolation 41452/51453 in 2026-04, then ephemeral-range
+    # avoidance 41453 today) both got circumvented by the proxy itself
+    # losing sockets at any port carrying the fragmented stream. Issue
+    # #286 has the full diagnostic trail.
+    #
+    # Host networking on Docker Desktop (>= 4.34) shares the macOS host
+    # network namespace with the container directly, so the bridge's
+    # listen socket lives on the host's loopback and UE5's sendto() goes
+    # straight there with no userspace proxy in the path. Other services
+    # in the compose stack keep their default bridge networking.
+    network_mode: host
+    # `ports:` is intentionally absent — host networking ignores it. The
+    # bridge process inside the container listens on 41452 (sensor UDP),
+    # 51453 (LiDAR UDP), and 8765 (foxglove WebSocket) directly on the
+    # host's interfaces.
+    extra_hosts:
+      # Resolves host.docker.internal on Linux (noop on Mac/Windows where it's built-in)
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Persist Numba JIT cache so ~20 s warmup only happens on first ever run.
+      # Redirected here via NUMBA_CACHE_DIR above so slam, control, and
+      # path_planning (including the vendored fsd_path_planning) all share it.
+      - numba_cache:/numba_cache
+      # `pipeline_ctrl` shared-volume mount removed in #381. Pre-feat/389
+      # the backend wrote `/pipeline_ctrl/enable` to start the autonomy
+      # and entrypoint.sh polled for it; that flag-file mechanism is
+      # retired in favour of the StartMission action chain (sup ↔ mcn
+      # ↔ mode_manager). Mission Control's /api/event/start and
+      # /api/pipeline/start now use rclpy actions exclusively.
+      #
+      # ----------------------------------------------------------------
+      # #497 — source bind mounts replaced by watched volumes.
+      # ----------------------------------------------------------------
+      # We used to bind-mount each ROS package over the image's COPY'd
+      # baseline so a Python edit on the host went live with a
+      # `docker compose restart` — see `tools/refresh-bridge.sh`. On
+      # Docker Desktop (macOS virtiofs / Windows + WSL2 9p) those bind
+      # mounts traversed a slow filesystem every time Python imported
+      # a module on container start, and `docker compose build`
+      # transferred the full 33 GB working tree as build context.
+      # Net cost on Windows with the repo on /mnt/c: 30-90 s startup
+      # + minutes per rebuild.
+      #
+      # Runtime ROS source now lives in Docker-managed volumes. New
+      # volumes are seeded from the image's /dv_pipeline_stack_ws/src
+      # contents, so the image remains the baseline, while
+      # `docker compose watch dv_pipeline_stack` syncs host edits into
+      # those volumes for live Python iteration without Windows
+      # bind-mount latency. Wrapper: tools/compose-up-and-watch.{sh,ps1}
+      # runs `up -d` then `watch` (Compose cannot embed watch in the YAML).
+      # Image-time `colcon build --symlink-install`
+      # makes existing Python files resolve through the synced source
+      # tree the next time lifecycle nodes restart.
+      #
+      # Caveats (run `docker compose build dv_pipeline_stack`, or use
+      # `tools/refresh-bridge.sh`, for these):
+      #   - C++ source changes (ifssim_bridge): need recompile.
+      #   - .msg file changes (fs_msgs): need regeneration.
+      #   - setup.py changes (new entry_points, new packages): need re-link.
+      #
+      # Mounted per-package, not as a single tree, because ros2/src/ and
+      # pipeline/ collapse into one src/ inside the container — mounting
+      # either parent would hide the other. fastdds_profile.xml is COPY'd
+      # into the image now (see Dockerfile), so it is not bind-mounted.
+      - dv_pipeline_cone_slam_src:/dv_pipeline_stack_ws/src/cone_slam
+      - dv_pipeline_control_src:/dv_pipeline_stack_ws/src/control
+      - dv_pipeline_path_planning_src:/dv_pipeline_stack_ws/src/path_planning
+      - dv_pipeline_cone_detection_src:/dv_pipeline_stack_ws/src/cone_detection
+      # #465 — bag_recorder_node hosts /bag_recorder/{start,stop}
+      # services so MC's web backend can record from inside this
+      # container (where the DDS context is SHM-tuned for full-
+      # fidelity LiDAR capture). See pipeline/bag_recorder_node/.
+      - dv_pipeline_bag_recorder_node_src:/dv_pipeline_stack_ws/src/bag_recorder_node
+      - dv_pipeline_fs_msgs_src:/dv_pipeline_stack_ws/src/fs_msgs
+      - dv_pipeline_ifssim_bridge_src:/dv_pipeline_stack_ws/src/ifssim_bridge
+      # Remaining pipeline packages — same watch + named-volume pattern as
+      # #497 so Python (and synced sources for C++ pkgs) update without an
+      # image rebuild. C++/msg changes still need `colcon build` inside the
+      # container or `docker compose build dv_pipeline_stack`.
+      - dv_pipeline_bringup_src:/dv_pipeline_stack_ws/src/bringup
+      - dv_pipeline_coche_urdf_src:/dv_pipeline_stack_ws/src/coche_urdf
+      - dv_pipeline_dv_msgs_src:/dv_pipeline_stack_ws/src/dv_msgs
+      - dv_pipeline_mission_control_src:/dv_pipeline_stack_ws/src/mission_control
+      - dv_pipeline_mode_manager_src:/dv_pipeline_stack_ws/src/mode_manager
+      - dv_pipeline_node_base_src:/dv_pipeline_stack_ws/src/node_base
+      - dv_pipeline_node_base_cpp_src:/dv_pipeline_stack_ws/src/node_base_cpp
+      - dv_pipeline_odometry_filter_src:/dv_pipeline_stack_ws/src/odometry_filter
+      - dv_pipeline_odometry_filter_node_src:/dv_pipeline_stack_ws/src/odometry_filter_node
+      - dv_pipeline_sim_supervisor_src:/dv_pipeline_stack_ws/src/sim_supervisor
+      #
+      # #465 v3 — landing dir for finalised bags. Used to be a bind
+      # mount to ./bags, but on macOS Docker Desktop (virtiofs) and
+      # Windows + WSL2 (9p) the cross-fs `shutil.move` from the
+      # /tmp staging dir to /bags took ~30 s for a multi-GB bag
+      # — the move blocked the StopBag service and visibly stalled
+      # Mission Control's session-stop click.
+      #
+      # Named docker volume keeps the bag on the container's local
+      # storage driver (real Linux ext4 / overlayfs), so the move
+      # is single-fs and finishes in <1 s. To pull a finalised bag
+      # onto the host filesystem:
+      #
+      #     tools/pull-bag.sh <bag_name>
+      #     tools/list-bags.sh                # enumerate available
+      #
+      # (Lichtblick reads from the host-side ./bags as before; the
+      # pull step is the only added handle.)
+      - ifssim_bags:/bags
+      # /tmp/ifssim_streams bind-mount removed: it existed to share an
+      # AF_UNIX LiDAR socket between the host plugin and the bridge
+      # container. The UDS LiDAR sender was retired in #322 and the
+      # surrounding UDS infrastructure (StartUds / StreamSensorsUds
+      # stub) was deleted in this PR's #322 follow-up. Production
+      # LiDAR is UDP-only on port 51453.
+    develop:
+      watch:
+        - action: sync
+          path: ./pipeline/cone_slam
+          target: /dv_pipeline_stack_ws/src/cone_slam
+          ignore: &ros_source_watch_ignore
+            - "**/__pycache__"
+            - "**/*.pyc"
+            - "**/.pytest_cache"
+        - action: sync
+          path: ./pipeline/control
+          target: /dv_pipeline_stack_ws/src/control
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/path_planning
+          target: /dv_pipeline_stack_ws/src/path_planning
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/cone_detection
+          target: /dv_pipeline_stack_ws/src/cone_detection
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/bag_recorder_node
+          target: /dv_pipeline_stack_ws/src/bag_recorder_node
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/fs_msgs
+          target: /dv_pipeline_stack_ws/src/fs_msgs
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./ros2/src/ifssim_bridge
+          target: /dv_pipeline_stack_ws/src/ifssim_bridge
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/bringup
+          target: /dv_pipeline_stack_ws/src/bringup
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/coche_urdf
+          target: /dv_pipeline_stack_ws/src/coche_urdf
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/dv_msgs
+          target: /dv_pipeline_stack_ws/src/dv_msgs
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/mission_control
+          target: /dv_pipeline_stack_ws/src/mission_control
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/mode_manager
+          target: /dv_pipeline_stack_ws/src/mode_manager
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/node_base
+          target: /dv_pipeline_stack_ws/src/node_base
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/node_base_cpp
+          target: /dv_pipeline_stack_ws/src/node_base_cpp
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/odometry_filter
+          target: /dv_pipeline_stack_ws/src/odometry_filter
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./pipeline/odometry_filter_node
+          target: /dv_pipeline_stack_ws/src/odometry_filter_node
+          ignore: *ros_source_watch_ignore
+        - action: sync
+          path: ./ros2/src/sim_supervisor
+          target: /dv_pipeline_stack_ws/src/sim_supervisor
+          ignore: *ros_source_watch_ignore
+    # Runtime peaks are host-dependent on Windows/WSL2, especially
+    # during cold Numba/GTSAM/FaSTTUBe startup. Keep swap off but give
+    # the pipeline enough RAM headroom to avoid Docker Desktop pressure
+    # while UE5 and browser tooling are also active.
+    mem_limit: 8g
+    memswap_limit: 8g
+    shm_size: 1gb         # Default 64 MB is too small for Fast DDS SHM —
+                          # 1 GB lets DDS use its native shared-memory
+                          # transport which is dramatically cheaper than
+                          # UDP for same-container pub/sub.
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "ifssim_bridge"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Mission Control backend — FastAPI telemetry + event management
+  mission_control_backend:
+    build:
+      context: .
+      dockerfile: docker/mission_control_backend/Dockerfile
+    # Host networking: matches dv_pipeline_stack so Fast DDS multicast
+    # discovery between the two containers Just Works without an
+    # intermediate Discovery Server. The backend's StartMission action
+    # client (ros_bridge.py) lives on the same DDS domain as
+    # sim_supervisor_node and reaches it directly. Side effects:
+    #   • `ports:` is ignored under host networking; backend listens
+    #     on host port 8000 directly. The frontend's nginx now
+    #     proxies to host.docker.internal:8000 instead of the
+    #     compose-network DNS name.
+    #   • extra_hosts is also a no-op (host networking always uses
+    #     the host's resolver); kept off this entry.
+    network_mode: host
+    environment:
+      - IFSSIM_HOST=${IFSSIM_HOST:-host.docker.internal}
+      - IFSSIM_PORT=${IFSSIM_PORT:-41451}
+      # ROS 2 / DDS — must match dv_pipeline_stack's domain so the
+      # supervisor's action server is visible. Default 0 matches the
+      # rest of the stack.
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      # Force Fast DDS to UDP-only on the backend side. Both containers
+      # run with `network_mode: host` so discovery works either way,
+      # but the data plane is the trap: dv_pipeline_stack's
+      # fastdds_profile.xml advertises SHM as the preferred transport,
+      # and Fast DDS's default builtin includes SHM too — so a writer
+      # in either container picks SHM for delivery, and the *other*
+      # container can't see the writer's /dev/shm segments (Docker
+      # gives each container an isolated /dev/shm by default). Symptom:
+      # `ros2 action list` works (UDP-multicast discovery), but a goal
+      # sent from the backend never reaches the supervisor and the
+      # client times out at "goal acceptance". Forcing UDPv4 only on
+      # the backend means it never advertises SHM as a locator, so
+      # dv_pipeline_stack's writer falls back to UDP when talking to
+      # us. Action goals are small (<1 KB), UDP overhead is negligible.
+      - FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+      # Container-internal path for reading/writing track files
+      - TRACKS_DIR=/tracks
+      # Host-side path sent to UE5 via RPC (UE5 runs on host, needs the real absolute path)
+      - UE5_TRACKS_DIR=${PWD}/Content/tracks
+      # Random track generator (MITMotorsports/random-track-generator, git submodule at tools/random-track-generator)
+      - TRACK_GEN_PATH=/track_gen
+      # Auth. If IFSSIM_MC_API_KEY is unset/empty the backend runs
+      # unauthenticated (dev default). Set via .env or the shell env
+      # before `docker compose up` to require X-API-Key on mutating
+      # endpoints and the telemetry WebSocket.
+      - IFSSIM_MC_API_KEY=${IFSSIM_MC_API_KEY:-}
+      - IFSSIM_MC_CORS_ORIGINS=${IFSSIM_MC_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      # #498 — auto-pull bag to host on session stop. When true the
+      # mc_backend StopBag handler shells out to `docker cp` to copy
+      # the bag from the dv_pipeline_stack container's `/bags` volume
+      # into the host's `./bags/<name>/`, then `docker exec ... rm -rf`
+      # the volume-side copy. The user gets the bag on their host
+      # filesystem without running `tools/pull-bag.sh` manually. Set
+      # to "0" / "false" to keep the manual flow (volume stays
+      # populated, retrieve with `tools/pull-bag.sh`).
+      - IFSSIM_BAG_AUTO_PULL=${IFSSIM_BAG_AUTO_PULL:-1}
+      # Container name of the dv_pipeline_stack — mc_backend's auto-pull
+      # talks to the docker daemon via the Python SDK and addresses the
+      # source container by this name. Compose names it
+      # `<project>-<service>-<idx>` by default; the project prefix is
+      # `ifssim` (pinned by `image:` in this file) so the full name is
+      # stable.
+      - DV_PIPELINE_STACK_CONTAINER=ifssim-dv_pipeline_stack-1
+    volumes:
+      # Tracks dir: STAYS as a bind mount on purpose. mc_backend's
+      # track_generate writes a CSV here; UE5 (the host process,
+      # NOT in a container) reads the same CSV via the loadTrack
+      # RPC. Both sides need to see the same physical directory, so
+      # this can't be a docker-only volume. The path itself is small
+      # (~few KB CSVs, infrequent writes) so the 9p/virtiofs cost is
+      # negligible vs. its essential role bridging container ↔ host.
+      - ./Content/tracks:/tracks
+      # #498 — docker socket for the auto-pull flow. mc_backend uses
+      # the Python docker SDK (`pip install docker`) to talk to the
+      # host daemon: stream `/bags/<name>` out of dv_pipeline_stack
+      # as a tarball, write it directly to /host_bags/ (bind-mounted
+      # below), then ask the daemon to `rm -rf /bags/<name>` inside
+      # dv_pipeline_stack. SECURITY NOTE: anything with docker.sock
+      # access can root the host. The blast radius for mc_backend is
+      # already broad (RPC into the sim, ROS action client, holds the
+      # API key), so this doesn't materially change the threat model
+      # for this dev/sim stack. Disable by setting
+      # `IFSSIM_BAG_AUTO_PULL=0` AND removing this mount if you want
+      # to harden the deployment.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # #498 — host-side landing directory for the auto-pulled bag.
+      # Mc_backend's docker SDK streams the bag tarball through this
+      # mount; the write is cross-filesystem (virtiofs on macOS, 9p
+      # on Windows + WSL2) but happens off the StopBag callback's hot
+      # path (the recording itself finalises in the named volume
+      # before this kicks in) and is only used at session-stop, so
+      # the per-import startup cost #490 was avoiding doesn't apply
+      # here.
+      - ./bags:/host_bags
+      # `pipeline_ctrl` shared-volume mount removed in #381 — flag-file
+      # path retired; autonomy bring-up is via StartMission action chain.
+      #
+      # #490 — random-track-generator bind mount removed. It's a git
+      # submodule that rarely changes; we COPY it into the image at
+      # build time (see Dockerfile) so there's no per-startup 9p cost
+      # and no need to bind-mount a read-only path. Re-running
+      # `git submodule update` now requires a `docker compose build`
+      # of mission_control_backend — acceptable for a tool that gets
+      # updated maybe once a quarter.
+      #
+      # /bags bind mount removed from mc_backend: bag recording moved
+      # to dv_pipeline_stack via the /bag_recorder/{start,stop}
+      # services (#465 v2). mc_backend is now a pure ROS service
+      # client for recording — no /bags, no ros2bag CLI, no mcap
+      # storage plugin needed here. See pipeline/bag_recorder_node/.
+    mem_limit: 512m
+    memswap_limit: 512m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/sim/status', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Backend now bootstraps rclpy + builds an ActionClient at
+      # startup; ROS image takes ~2-3 s longer to come up than the old
+      # python:3.12-slim base. 20 s start period gives that headroom.
+      start_period: 20s
+
+  # Lichtblick — web-based ROS 2 visualizer, connects to Foxglove bridge
+  # at ws://localhost:8765.
+  #
+  # Built from upstream source (pinned tag) rather than pulling
+  # ghcr.io/lichtblick-suite/lichtblick:latest, because upstream's CI
+  # only publishes a linux/amd64 manifest. On Apple Silicon hosts that
+  # forced the container to run under Rosetta, which pinned ~1 full
+  # CPU core on the host and degraded the rest of the pipeline (the
+  # DV stack and the bridge are on the same host, so anything that
+  # melts a core eats LiDAR throughput). Building locally with no
+  # `platform:` override picks the host's native arch — arm64 on
+  # M-series, amd64 on x86 — automatically.
+  #
+  # Build is yarn-install-heavy (~3-5 min first time) but cached by
+  # the Docker layer cache and pinned by tag, so it only runs again
+  # when LICHTBLICK_VERSION below is bumped.
+  lichtblick:
+    build:
+      # Local Dockerfile that clones the pinned Lichtblick tag inside
+      # the build, runs yarn install + the webpack prod build with
+      # an 8 GB Node heap, then assembles a caddy-served static image.
+      # The original git-URL build context approach OOM'd on the
+      # webpack stage at 108 s — the upstream Dockerfile leaves the
+      # default 4 GB Node heap which isn't enough for the main chunk.
+      # See docker/lichtblick/Dockerfile for the full rationale + the
+      # LICHTBLICK_REF pin.
+      context: ./docker/lichtblick
+    # Bind to all interfaces so teammates / phones / tablets on the
+    # same LAN can hit the web UI at http://<host-ip>:8080. The
+    # original 127.0.0.1 binding kept it loopback-only — fine when
+    # the only user was the sim host itself, but the whole point of
+    # building Lichtblick natively (this PR) is also to let another
+    # device do the rendering and offload CPU. Lichtblick's web UI
+    # is pure static + a WebSocket client to /8765; opening it to
+    # the LAN doesn't widen the attack surface beyond what
+    # foxglove_bridge already does on the same host network.
+    ports:
+      - "0.0.0.0:8080:8080"
+    restart: unless-stopped
+
+  # Mission Control frontend — React/Tailwind dashboard
+  mission_control_frontend:
+    build:
+      context: .
+      dockerfile: docker/mission_control_frontend/Dockerfile
+    ports:
+      - "127.0.0.1:3000:80"
+    # Backend is on host networking now; nginx upstream targets
+    # host.docker.internal:8000 instead of the compose DNS name.
+    # extra_hosts ensures that name resolves to the host gateway from
+    # inside the frontend container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - mission_control_backend
+    mem_limit: 64m
+    memswap_limit: 64m
+    restart: unless-stopped
+
+
+volumes:
+  numba_cache:
+  dv_pipeline_cone_slam_src:
+  dv_pipeline_control_src:
+  dv_pipeline_path_planning_src:
+  dv_pipeline_cone_detection_src:
+  dv_pipeline_bag_recorder_node_src:
+  dv_pipeline_fs_msgs_src:
+  dv_pipeline_ifssim_bridge_src:
+  dv_pipeline_bringup_src:
+  dv_pipeline_coche_urdf_src:
+  dv_pipeline_dv_msgs_src:
+  dv_pipeline_mission_control_src:
+  dv_pipeline_mode_manager_src:
+  dv_pipeline_node_base_src:
+  dv_pipeline_node_base_cpp_src:
+  dv_pipeline_odometry_filter_src:
+  dv_pipeline_odometry_filter_node_src:
+  dv_pipeline_sim_supervisor_src:
+  # `pipeline_ctrl` named volume removed in #381 — see the mount-site
+  # comments above for context. Existing `pipeline_ctrl` volumes on
+  # developer machines can be reclaimed with `docker volume rm
+  # ifssim_pipeline_ctrl` after this commit lands; harmless if left.
+  # #465 v3 — landing volume for finalised bags. See the mount-site
+  # comment in dv_pipeline_stack for the rationale (avoid virtiofs/9p
+  # on the StopBag move). Operators retrieve bags onto the host with
+  # `tools/pull-bag.sh <name>`.
+  ifssim_bags:
