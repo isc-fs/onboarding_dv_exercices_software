@@ -177,7 +177,7 @@ void UdpReceiver::lidarListenerThread(int port)
                 && pending_lidar_.chunks_received > 0
                 && lidar_cb_) {
                 lidar_cb_(pending_lidar_.total_points, pending_lidar_.channels,
-                          pending_lidar_.lag_ns,
+                          pending_lidar_.lag_ns, pending_lidar_.sim_capture_ns,
                           pending_lidar_.points);
             }
             pending_lidar_.frame_id = header->frame_id;
@@ -187,6 +187,7 @@ void UdpReceiver::lidarListenerThread(int port)
             pending_lidar_.chunks_received = 0;
             pending_lidar_.delivered = false;
             pending_lidar_.lag_ns = header->lag_ns;
+            pending_lidar_.sim_capture_ns = header->sim_capture_ns;
             pending_lidar_.points.assign(header->total_points * 4, 0.0f);  // x,y,z,intensity — #255
         }
         if (pending_lidar_.delivered) {
@@ -222,7 +223,7 @@ void UdpReceiver::lidarListenerThread(int port)
         if (pending_lidar_.chunks_received >= pending_lidar_.total_chunks) {
             if (lidar_cb_) {
                 lidar_cb_(pending_lidar_.total_points, pending_lidar_.channels,
-                          pending_lidar_.lag_ns,
+                          pending_lidar_.lag_ns, pending_lidar_.sim_capture_ns,
                           pending_lidar_.points);
             }
             pending_lidar_.delivered = true;

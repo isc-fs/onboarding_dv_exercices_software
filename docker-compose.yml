@@ -326,9 +326,8 @@ services:
     # client (ros_bridge.py) lives on the same DDS domain as
     # sim_supervisor_node and reaches it directly. Side effects:
     #   • `ports:` is ignored under host networking; backend listens
-    #     on host port 8000 directly. The frontend's nginx now
-    #     proxies to host.docker.internal:8000 instead of the
-    #     compose-network DNS name.
+    #     on host port 8000 directly. The frontend also uses host
+    #     networking so nginx can proxy to 127.0.0.1:8000.
     #   • extra_hosts is also a no-op (host networking always uses
     #     the host's resolver); kept off this entry.
     network_mode: host

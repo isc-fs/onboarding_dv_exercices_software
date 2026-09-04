@@ -16,7 +16,13 @@ struct SensorFrame
 {
     uint32_t magic;
     uint32_t frame_id;
+    // UE game/sim time at capture, in ns (the ~0.77×-real physics clock).
+    // Bridge writes this into header.stamp and drives /clock from it.
+    // Matches FFSDSSensorFrame::Timestamp.
     uint64_t timestamp;
+    // Wall-clock at capture, in ns — latency/health metrics only, never
+    // used for integration. Matches FFSDSSensorFrame::ExternalTimestamp.
+    uint64_t external_timestamp;
 
     // GPS
     double latitude, longitude;
@@ -76,6 +82,12 @@ struct LidarChunkHeader
     // (publisher LastTimestamp was capture-time but the wire format
     // dropped it on the floor).
     int64_t lag_ns;
+    // Absolute UE game/sim time of scan capture, in ns (Option 2). When
+    // >0 the bridge stamps header.stamp straight from this — immune to the
+    // readback/transport/backlog latency that made lag_ns drift upward over
+    // a long run. Falls back to now()-lag_ns when 0 (old plugin build).
+    // Matches FFSDSLidarChunkHeader::SimCaptureNs.
+    int64_t sim_capture_ns;
 };
 
 #pragma pack(pop)
@@ -92,7 +104,7 @@ class UdpReceiver
 public:
     using SensorCallback = std::function<void(const SensorFrame&)>;
     using LidarCallback = std::function<void(int32_t total_points, int32_t channels,
-                                              int64_t lag_ns,
+                                              int64_t lag_ns, int64_t sim_capture_ns,
                                               const std::vector<float>& points)>;
 
     UdpReceiver();
@@ -130,6 +142,9 @@ private:
         // (essentially) the same value. Wrapper subtracts this from
         // node_->now() at publish time to recover the capture-time stamp.
         int64_t lag_ns = 0;
+        // Absolute sim capture time (ns) — preserved from the first chunk,
+        // same as lag_ns. Bridge prefers this over lag_ns when >0.
+        int64_t sim_capture_ns = 0;
         std::vector<float> points;
     };
     LidarFrame pending_lidar_;

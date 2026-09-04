@@ -262,6 +262,18 @@ class ConeDetectionNode(BaseLifecycleNode):
         per_scan["accepted_centerline"] = n_centerline
         per_scan["accepted_bigorange"] = n_bigorange
 
+        if per_scan.get("dbscan_guard_scans", 0):
+            # Loud but throttled: this scan was NOT a cone scene (car facing
+            # terrain / an object, or a bad ground plane). Without the guard
+            # it would have cost seconds and gigabytes — see
+            # ConeDetectionConfig.dbscan_max_points.
+            self.get_logger().warning(
+                "DBSCAN guard: above-ground cloud too large/dense, dropped "
+                f"{per_scan.get('dbscan_guard_dropped', 0)} pts before "
+                "clustering (car off-track or ground plane mis-fit?)",
+                throttle_duration_sec=5.0,
+            )
+
         for k, v in per_scan.items():
             self._diag[k] = self._diag.get(k, 0) + v
         self._diag_n_scans += 1
@@ -285,7 +297,8 @@ class ConeDetectionNode(BaseLifecycleNode):
                 f"by-side: L={self._diag.get('accepted_left', 0) / n:4.1f} "
                 f"R={self._diag.get('accepted_right', 0) / n:4.1f} "
                 f"C={self._diag.get('accepted_centerline', 0) / n:.1f} "
-                f"BO={self._diag.get('accepted_bigorange', 0) / n:.1f}"
+                f"BO={self._diag.get('accepted_bigorange', 0) / n:.1f} "
+                f"dbscan_guard={self._diag.get('dbscan_guard_scans', 0)}/{n}"
             )
             self._reset_diag()
             self._diag_last_log_ns = now_ns

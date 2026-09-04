@@ -274,6 +274,11 @@ void IFSSIMRosWrapper::initializePublishers()
     // consistency since its subscribers (none currently reliable-only) can
     // tolerate the rare drop.
     auto sensor_qos = rclcpp::QoS(rclcpp::KeepLast(5)).best_effort();
+    // /clock — sim-time source for the pipeline (use_sim_time). ClockQoS is
+    // RELIABLE + TRANSIENT_LOCAL so a node spinning up late still latches the
+    // most recent time instead of blocking at t=0 until the next tick.
+    clock_pub_ = node_->create_publisher<rosgraph_msgs::msg::Clock>(
+        "/clock", rclcpp::ClockQoS());
     gps_pub_ = node_->create_publisher<sensor_msgs::msg::NavSatFix>("gps", sensor_qos);
     imu_pub_ = node_->create_publisher<sensor_msgs::msg::Imu>("imu", sensor_qos);
     gss_pub_ = node_->create_publisher<geometry_msgs::msg::TwistWithCovarianceStamped>("gss", sensor_qos);
@@ -446,7 +451,7 @@ void IFSSIMRosWrapper::startStreaming()
         // hot path doesn't pay for an unused listener.
         udp_receiver_.setLidarCallback(
             [this](int32_t total_points, int32_t channels,
-                   int64_t lag_ns,
+                   int64_t lag_ns, int64_t sim_capture_ns,
                    const std::vector<float>& points) {
                 LidarChunkHeader hdr{};
                 hdr.magic = LIDAR_MAGIC;
@@ -457,6 +462,7 @@ void IFSSIMRosWrapper::startStreaming()
                 hdr.total_points = total_points;
                 hdr.channels = channels;
                 hdr.lag_ns = lag_ns;
+                hdr.sim_capture_ns = sim_capture_ns;
                 {
                     std::lock_guard<std::mutex> lock(lidar_pub_mutex_);
                     lidar_pending_ = PendingLidarFrame{hdr, points};
@@ -617,9 +623,10 @@ void IFSSIMRosWrapper::lidarStreamThread()
         int32_t  channels;
         int32_t  total_points;
         int64_t  lag_ns;
+        int64_t  sim_capture_ns;  // absolute UE sim capture time (ns), Option 2
     };
     #pragma pack(pop)
-    static_assert(sizeof(WireHeader) == 24,
+    static_assert(sizeof(WireHeader) == 32,
         "Bridge wire header out of sync with plugin's FFSDSLidarStreamHeader");
 
     // Reusable point-cloud receive buffer. Sized for the worst-case
@@ -699,6 +706,7 @@ void IFSSIMRosWrapper::lidarStreamThread()
         pub_hdr.total_points = hdr.total_points;
         pub_hdr.channels = hdr.channels;
         pub_hdr.lag_ns = hdr.lag_ns;
+        pub_hdr.sim_capture_ns = hdr.sim_capture_ns;
 
         {
             std::lock_guard<std::mutex> lock(lidar_pub_mutex_);
@@ -835,8 +843,45 @@ void IFSSIMRosWrapper::triggerReconnect()
 
 void IFSSIMRosWrapper::onSensorFrame(const SensorFrame& f)
 {
-    auto now = node_->now();
+    // Capture clock = the plugin's UE game/sim time (ns), NOT the bridge's
+    // wall clock. Stamping sensor messages and /clock from this is the whole
+    // fix for the "clock stretch": every consumer with use_sim_time now
+    // integrates on sim seconds (the ~0.77×-real physics clock) instead of
+    // wall seconds, so EKF distance and SLAM heading stop over-counting ~30%.
+    // The bridge itself stays on wall time (it's the /clock source — see
+    // clock_pub_ comment in the header), so node_->now() is unused here.
+    rclcpp::Time now(static_cast<int64_t>(f.timestamp), RCL_ROS_TIME);
     ++sensor_frame_count_;
+
+    // Sim-time rewind — IFSSIM restarted / level reloaded while the bridge
+    // stayed up (see last_clock_stamp_ in the header). Frames arrive in order
+    // on one TCP stream, so a step back beyond the jitter threshold can only
+    // mean the plugin's game clock started over. Reset the per-session
+    // guards so /clock follows the new sim time immediately instead of going
+    // silent, and so the IMU clamp stops pinning stamps to old_time + 1 ns.
+    // Downstream, rcl timers re-arm on a backward jump and tf2 buffers clear.
+    // Both guards live on this (sensor) thread; the LiDAR clamp is reset on
+    // its own thread in onLidarFrame().
+    if (last_clock_stamp_.nanoseconds() > 0 &&
+        now.nanoseconds() + kSimTimeRewindThresholdNs < last_clock_stamp_.nanoseconds())
+    {
+        RCLCPP_WARN(node_->get_logger(),
+            "Sim time rewound %.1f s → %.1f s (IFSSIM restart / level reload?) "
+            "— re-basing /clock and sensor stamp guards on the new session",
+            last_clock_stamp_.seconds(), now.seconds());
+        last_clock_stamp_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+        last_imu_stamp_   = rclcpp::Time(0, 0, RCL_ROS_TIME);
+    }
+
+    // Drive /clock from the sim stamp. /clock must be non-decreasing; the
+    // game tick can repeat a sim ns across consecutive 400 Hz frames, so only
+    // publish when time actually advanced (a repeat is a no-op, not a rewind).
+    if (now > last_clock_stamp_) {
+        rosgraph_msgs::msg::Clock clk;
+        clk.clock = now;
+        clock_pub_->publish(clk);
+        last_clock_stamp_ = now;
+    }
 
     // GPS — 10 Hz (every 40 frames of the 400 Hz stream)
     if (sensor_frame_count_ % 40 == 0)
@@ -1020,17 +1065,39 @@ void IFSSIMRosWrapper::onLidarFrame(const LidarChunkHeader& header, const float*
     int total_points = header.total_points;
     if (total_points <= 0) return;
 
-    // Capture-time stamping (#238). The plugin tags each chunk with the
-    // capture-to-send lag in ns (LidarChunkHeader::lag_ns) — i.e. how
-    // long ago this scan was physically captured at the moment the
-    // publisher packed the wire frame. Subtract from the bridge's clock
-    // at receive time to recover the capture-time stamp. Self-correcting
-    // and clock-sync-free (the lag is a duration, not an absolute time).
-    // Fallback to node_->now() when lag_ns == 0 (old plugin build, or a
-    // chunk that landed before the LiDAR's first scan completed).
-    rclcpp::Time lidar_stamp = node_->now();
-    if (header.lag_ns > 0) {
-        lidar_stamp = lidar_stamp - rclcpp::Duration::from_nanoseconds(header.lag_ns);
+    // Capture-time stamping. Preferred path (Option 2): the plugin tags each
+    // scan with the ABSOLUTE UE sim time of capture (sim_capture_ns). Stamp
+    // header.stamp straight from it — immune to GPU readback + transport +
+    // DDS-backlog latency, which is what made the old lag_ns scheme drift
+    // upward over a long run (lag only covered plugin capture-to-send, not
+    // the rest of the pipeline). This is the same sim clock /clock runs on,
+    // so under use_sim_time the LiDAR aligns with odom/IMU by construction.
+    //
+    // Fallback (old plugin build, sim_capture_ns == 0): the legacy #238
+    // scheme — subtract the capture-to-send lag from the bridge's wall clock.
+    // NOTE this fallback mixes clock domains (wall now() vs sim stamps
+    // elsewhere); it only exists for back-compat with pre-Option-2 plugins.
+    rclcpp::Time lidar_stamp;
+    if (header.sim_capture_ns > 0) {
+        lidar_stamp = rclcpp::Time(header.sim_capture_ns, RCL_ROS_TIME);
+        // Sim-time rewind (IFSSIM restart / level reload) — same detection
+        // as onSensorFrame(), applied to this stream's own clamp because it
+        // lives on the LiDAR publish thread. Without this the clamp below
+        // would pin every scan to old_time + 1 ns after a sim restart.
+        if (last_lidar_stamp_.nanoseconds() > 0 &&
+            lidar_stamp.nanoseconds() + kSimTimeRewindThresholdNs
+                < last_lidar_stamp_.nanoseconds())
+        {
+            RCLCPP_WARN(node_->get_logger(),
+                "LiDAR sim time rewound %.1f s → %.1f s — re-basing stamp guard",
+                last_lidar_stamp_.seconds(), lidar_stamp.seconds());
+            last_lidar_stamp_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+        }
+    } else {
+        lidar_stamp = node_->now();
+        if (header.lag_ns > 0) {
+            lidar_stamp = lidar_stamp - rclcpp::Duration::from_nanoseconds(header.lag_ns);
+        }
     }
     // Monotonic guard — same rationale as the IMU clamp in onSensorFrame.
     // GLIM expects strictly increasing timestamps on /lidar/Lidar1.

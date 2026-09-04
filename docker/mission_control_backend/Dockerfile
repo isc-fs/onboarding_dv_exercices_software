@@ -46,17 +46,28 @@ RUN pip3 install --no-cache-dir "docker>=7,<8"
 # pipeline/bag_recorder_node/.
 
 # ---------------------------------------------------------------------
-# Build dv_msgs + fs_msgs in their own little workspace under /msgs_ws.
-# Keeping it separate from /app means a backend source edit doesn't
-# touch the install tree (no risky rebuild), and conversely an
-# interface change shows up as a clean rebuild step.
+# Build dv_msgs + fs_msgs + mission_control in their own little
+# workspace under /msgs_ws. Keeping it separate from /app means a
+# backend source edit doesn't touch the install tree (no risky
+# rebuild), and conversely an interface change shows up as a clean
+# rebuild step.
+#
+# mission_control is here purely so the backend can import the stock
+# uDV interface contract (`mission_control.interface_contract`), the
+# single source of truth for the /sim/* panel topics + /dv/status byte
+# values that ros_bridge.py now drives. It's a pure-Python ament_python
+# package with an empty __init__ and a dependency-free
+# interface_contract module, so building just this package (no rclpy
+# import at module load) is cheap and safe in the backend image. We
+# don't run the mission_control NODE here — only the contract module.
 # ---------------------------------------------------------------------
 WORKDIR /msgs_ws
 RUN mkdir -p src
-COPY pipeline/dv_msgs/   src/dv_msgs/
-COPY pipeline/fs_msgs/   src/fs_msgs/
+COPY pipeline/dv_msgs/          src/dv_msgs/
+COPY pipeline/fs_msgs/          src/fs_msgs/
+COPY pipeline/mission_control/  src/mission_control/
 RUN . /opt/ros/humble/setup.sh \
-    && colcon build --packages-select fs_msgs dv_msgs \
+    && colcon build --packages-select fs_msgs dv_msgs mission_control \
                     --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # ---------------------------------------------------------------------
@@ -85,8 +96,8 @@ ENV IFSSIM_PORT=41451
 EXPOSE 8000
 
 # Source ROS + the locally-built msgs workspace before launching uvicorn,
-# otherwise `import rclpy` and `from dv_msgs.action import StartMission`
-# both fail at backend startup. /bin/bash -lc gives us a login shell so
+# otherwise `import rclpy` and `from mission_control.interface_contract
+# import ...` both fail at backend startup. /bin/bash -lc gives us a login shell so
 # /opt/ros/humble/setup.bash and /msgs_ws/install/setup.bash run as
 # expected; the inner `exec` hands PID 1 to uvicorn so SIGTERM from
 # `docker compose down` lands cleanly on the actual web server.

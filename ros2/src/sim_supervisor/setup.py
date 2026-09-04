@@ -16,9 +16,9 @@ setup(
     maintainer="Raul Moran",
     maintainer_email="raul@isc-fs.com",
     description=(
-        "sim_supervisor_node — simulates the IFS-08 uDV (microROS "
-        "endpoint over USB CDC on the real car) for the DV pipeline. "
-        "Sim-only; not built on the real car."
+        "sim_supervisor_node — sim uDV emulator (AS state machine, "
+        "/ctrl/cmd relay, /force_ebs). Speaks the stock-typed "
+        "mission_control.interface_contract. Sim-only."
     ),
     license="MIT",
     tests_require=["pytest"],

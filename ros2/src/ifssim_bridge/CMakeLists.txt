@@ -11,6 +11,7 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(rosgraph_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(fs_msgs REQUIRED)
@@ -26,7 +27,7 @@ target_include_directories(ifssim_ros_wrapper PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 ament_target_dependencies(ifssim_ros_wrapper
-  rclcpp std_msgs geometry_msgs sensor_msgs nav_msgs tf2 tf2_ros fs_msgs
+  rclcpp std_msgs geometry_msgs sensor_msgs nav_msgs rosgraph_msgs tf2 tf2_ros fs_msgs
 )
 
 # Link Winsock2 on Windows
