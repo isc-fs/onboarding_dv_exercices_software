@@ -487,14 +487,11 @@ services:
     build:
       context: .
       dockerfile: docker/mission_control_frontend/Dockerfile
-    ports:
-      - "127.0.0.1:3000:80"
-    # Backend is on host networking now; nginx upstream targets
-    # host.docker.internal:8000 instead of the compose DNS name.
-    # extra_hosts ensures that name resolves to the host gateway from
-    # inside the frontend container.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # Host networking (Linux): nginx listens on host :3000 and proxies
+    # to 127.0.0.1:8000. Avoids UFW dropping docker-bridge → host:8000
+    # when using host.docker.internal from a bridged container.
+    # `ports:` / extra_hosts are no-ops under host networking.
+    network_mode: host
     depends_on:
       - mission_control_backend
     mem_limit: 64m

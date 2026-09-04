@@ -86,3 +86,4 @@ if you need it later.
 Supported the same way as IFSSIM’s Docker path: ensure
 `extra_hosts` / `host.docker.internal` resolves to the host running the
 sim binary (see `docker-compose.yml`).
+On Linux set `IFSSIM_HOST=127.0.0.1` in `.env` (Mac/Windows can keep `host.docker.internal`).

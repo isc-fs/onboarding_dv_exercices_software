@@ -1,0 +1,22 @@
+# Linux local override (gitignored) — not used on Mac/Windows.
+#
+# UFW DEFAULT_FORWARD_POLICY=DROP blocks bridge→host, so the frontend
+# container cannot reach the host-networked Mission Control backend via
+# host.docker.internal. Run the frontend in the host netns and talk to
+# 127.0.0.1:8000. Nginx is rebound to :3000 so http://localhost:3000
+# keeps working.
+#
+# `!reset ports` clears the base compose `ports:` mapping; without it
+# Compose warns "Published ports are discarded when using host network
+# mode" because the merged config still carries 127.0.0.1:3000->80.
+services:
+  mission_control_frontend:
+    network_mode: host
+    ports: !reset []
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        sed -i 's/listen 80;/listen 3000;/' /etc/nginx/conf.d/default.conf
+        sed -i 's/host\.docker\.internal:8000/127.0.0.1:8000/g' /etc/nginx/conf.d/default.conf
+        exec /docker-entrypoint.sh nginx -g 'daemon off;'
